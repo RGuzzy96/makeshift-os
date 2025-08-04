@@ -1,0 +1,7 @@
+fs
+
+*.o
+*.img
+*.elf
+*.bin
+*.log
