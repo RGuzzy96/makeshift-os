@@ -1,0 +1,58 @@
+#!/bin/sh
+
+# script to organize arguments and run QEMU virtual emulator
+
+echo "Running virtual emulator"
+
+ARGS=""
+if [ "$1" = "debug" ]; then
+  ARGS="-monitor unix:/tmp/qemu-monitor-socket,server,nowait -s -S"
+fi
+
+MSI_CAPABILITIES=""
+
+XHCI_CAPABILITIES="$(qemu-system-aarch64 -device qemu-xhci,help)"
+
+if echo "$XHCI_CAPABILITIES" | grep -q "msi "; then
+  MSI_CAPABILITIES="msi=on,msix=off,"
+fi
+
+OS_TYPE="$(uname)"
+
+DISPLAY_MODE="default"
+SELECTED_GPU="virtio-gpu-pci"
+
+if [ "$OS_TYPE" = "Darwin" ]; then
+    NETARG="vmnet-bridged,id=net0,ifname=en0"
+    PRIVILEGE="sudo"
+    DISPLAY_MODE="sdl"
+elif [ "$OS_TYPE" = "Linux" ]; then
+    NETARG="user,id=net0"
+    PRIVILEGE=""
+elif [[ "$OS_TYPE" == *"MINGW"* ]]; then
+    NETARG="user,id=net0"
+    PRIVILEGE=""
+    DISPLAY_MODE="sdl"
+else
+    echo "Unknown OS: $OS_TYPE" >&2
+    exit 1
+fi
+
+$PRIVILEGE qemu-system-aarch64 \
+  -M virt \
+  -cpu cortex-a72 \
+  -m 512M \
+  -kernel kernel.elf \
+  -device $SELECTED_GPU \
+  -display $DISPLAY_MODE \
+  -netdev $NETARG \
+  -device virtio-net-pci,netdev=net0 \
+  -serial mon:stdio \
+  -drive file=disk.img,if=none,format=raw,id=hd0 \
+  -device virtio-blk-pci,drive=hd0 \
+  -device qemu-xhci,${MSI_CAPABILITIES}id=usb \
+  -device usb-kbd,bus=usb.0 \
+  -device virtio-sound-pci,audiodev=sdl_audio \
+  -audiodev sdl,id=sdl_audio \
+  -d guest_errors \
+  $ARGS
